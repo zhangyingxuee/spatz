@@ -54,7 +54,9 @@ module spatz_controller
     input  logic             [NrVregfilePorts-1:0] sb_enable_i,
     input  logic             [NrWritePorts-1:0]    sb_wrote_result_i,
     output logic             [NrVregfilePorts-1:0] sb_enable_o,
-    input  spatz_id_t        [NrVregfilePorts-1:0] sb_id_i
+    input  spatz_id_t        [NrVregfilePorts-1:0] sb_id_i,
+    output logic [NrVregfilePorts-NrWritePorts-1:0] sb_vlefw_read_o,  // VLE forward read enable for VRF (yx)
+    output logic             [NrWritePorts-1:0]    sb_vlefw_write_o  // VLE forward write enable for VRF (yx)
   );
 
 // Include FF
@@ -77,10 +79,14 @@ module spatz_controller
   vlen_t  vstart_d, vstart_q;
   vlen_t  vl_d, vl_q;
   vtype_t vtype_d, vtype_q;
+  logic vlefw_en_d, vlefw_en_q; // VLE forward extension enable (yx)
+  vreg_t FWVreg_d, FWVreg_q; // VLE forward register setting (yx)
 
   `FF(vstart_q, vstart_d, '0)
   `FF(vl_q, vl_d, '0)
   `FF(vtype_q, vtype_d, '{vill: 1'b1, vsew: EW_8, vlmul: LMUL_1, default: '0})
+  `FF(vlefw_en_q, vlefw_en_d, 1'b0) // VLE forward extension enable (yx)
+  `FF(FWVreg_q, FWVreg_d, 6'b0) // VLE forward register setting (yx)
 
   always_comb begin : proc_vcsr
     automatic logic [$clog2(MAXVL):0] vlmax = 0;
@@ -88,6 +94,7 @@ module spatz_controller
     vstart_d = vstart_q;
     vl_d     = vl_q;
     vtype_d  = vtype_q;
+    vlefw_en_d = vlefw_en_q; // VLE forward extension enable (yx)
 
     if (spatz_req_valid) begin
       // Reset vstart to zero if we have a new non CSR operation
@@ -103,6 +110,19 @@ module spatz_controller
           vstart_d = vstart_q | vlen_t'(spatz_req.rs1);
         end else if (spatz_req.op_cfg.clear_vstart) begin
           vstart_d = vstart_q & ~vlen_t'(spatz_req.rs1);
+        end
+
+        // Check for VLE forward extension (yx) 
+        if (spatz_req.op_cfg.vleforward) begin
+          if (vlefw_en_q && (FWVreg_q == vreg_t'(spatz_req.rs1))) begin
+            // Disable if the same register is written again
+            vlefw_en_d = '0;
+          end else begin
+            vlefw_en_d = '1;
+            FWVreg_d = vlen_t'(spatz_req.rs1); // Set forward register setting (yx)
+          end
+        end else begin
+          vlefw_en_d = '0;
         end
       end
 
@@ -237,6 +257,16 @@ module spatz_controller
   scoreboard_metadata_t [NrParallelInstructions-1:0] scoreboard_q, scoreboard_d;
   `FF(scoreboard_q, scoreboard_d, '0)
 
+  // VLE forware write/read tracking. Is the instruction reading/writing to the special register? (yx)
+  typedef struct packed {
+    spatz_id_t                                    id;
+    logic      [NrWritePorts-1:0]                write;
+    logic      [NrVregfilePorts-NrWritePorts-1:0] read;
+  } vlefw_table_t;
+
+  vlefw_table_t [NrParallelInstructions-1:0] vlefw_table_d, vlefw_table_q;
+  `FF(vlefw_table_q, vlefw_table_d, '{default: '0})
+
   // Did the instruction write to the VRF in the previous cycle?
   logic [NrParallelInstructions-1:0] wrote_result_q, wrote_result_d;
   `FF(wrote_result_q, wrote_result_d, '0)
@@ -249,6 +279,9 @@ module spatz_controller
   logic [NrParallelInstructions-1:0] wrote_result_narrowing_q, wrote_result_narrowing_d;
   `FF(wrote_result_narrowing_q, wrote_result_narrowing_d, '0)
 
+
+  localparam int NrReadPorts = NrVregfilePorts - NrWritePorts;
+
   always_comb begin : scoreboard
     // Maintain stated
     read_table_d             = read_table_q;
@@ -256,14 +289,42 @@ module spatz_controller
     scoreboard_d             = scoreboard_q;
     narrow_wide_d            = narrow_wide_q;
     wrote_result_narrowing_d = wrote_result_narrowing_q;
+    vlefw_table_d            = vlefw_table_q; //(yx)
+    sb_vlefw_read_o          = '0; //(yx)
+    sb_vlefw_write_o         = '0; //(yx)
 
     // Nobody wrote to the VRF yet
     wrote_result_d = '0;
     sb_enable_o    = '0;
 
-    for (int unsigned port = 0; port < NrVregfilePorts; port++)
+    for (int unsigned port = 0; port < NrVregfilePorts; port++) begin 
       // Enable the VRF port if the dependant instructions wrote in the previous cycle
       sb_enable_o[port] = sb_enable_i[port] && &(~scoreboard_q[sb_id_i[port]].deps | wrote_result_q) && (!(|scoreboard_q[sb_id_i[port]].deps) || !scoreboard_q[sb_id_i[port]].prevent_chaining);
+
+
+      // Set VLE forward signals based on vlefw_table (yx)
+      // Initialisation to zero
+
+      if (sb_enable_o[port] && vlefw_en_q) begin
+        // Check if this instruction is accessing the forward register
+        if (port < NrReadPorts) begin
+          // Read port
+          if (vlefw_table_q[sb_id_i[port]].read[port]) begin
+            sb_vlefw_read_o[port] = 1'b1;
+          end else begin 
+            sb_vlefw_read_o[port] = 1'b0;
+          end
+        end else begin
+          // Write port
+          if (vlefw_table_q[sb_id_i[port]].write[port - NrReadPorts]) begin
+            sb_vlefw_write_o[port - NrReadPorts] = 1'b1;
+          end else begin 
+            sb_vlefw_write_o[port - NrReadPorts] = 1'b0;
+          end
+        end
+      
+      end
+    end 
 
     // Store the decisions
     if (sb_enable_o[SB_VFU_VD_WD]) begin
@@ -292,6 +353,7 @@ module spatz_controller
       scoreboard_d[vfu_rsp_i.id]             = '0;
       narrow_wide_d[vfu_rsp_i.id]            = 1'b0;
       wrote_result_narrowing_d[vfu_rsp_i.id] = 1'b0;
+      vlefw_table_d[vfu_rsp_i.id]            = '0; //(yx)
       for (int unsigned insn = 0; insn < NrParallelInstructions; insn++)
         scoreboard_d[insn].deps[vfu_rsp_i.id] = 1'b0;
     end
@@ -306,6 +368,7 @@ module spatz_controller
       scoreboard_d[vlsu_rsp_i.id]             = '0;
       narrow_wide_d[vlsu_rsp_i.id]            = 1'b0;
       wrote_result_narrowing_d[vlsu_rsp_i.id] = 1'b0;
+      vlefw_table_d[vlsu_rsp_i.id]            = '0; //(yx)
       for (int unsigned insn = 0; insn < NrParallelInstructions; insn++)
         scoreboard_d[insn].deps[vlsu_rsp_i.id] = 1'b0;
     end
@@ -320,12 +383,40 @@ module spatz_controller
       scoreboard_d[vsldu_rsp_i.id]             = '0;
       narrow_wide_d[vsldu_rsp_i.id]            = 1'b0;
       wrote_result_narrowing_d[vsldu_rsp_i.id] = 1'b0;
+      vlefw_table_d[vsldu_rsp_i.id]            = '0; //(yx)
       for (int unsigned insn = 0; insn < NrParallelInstructions; insn++)
         scoreboard_d[insn].deps[vsldu_rsp_i.id] = 1'b0;
     end
 
     // Initialize the scoreboard metadata if we have a new instruction issued.
     if (spatz_req_valid && spatz_req.ex_unit != CON) begin
+
+      // Special register for VLE forward extension, check if enabled (yx) 
+      
+      if (vlefw_en_q) begin 
+        // Detect if the operand register matches the forward register (yx)
+        vlefw_table_d[spatz_req.id] = '{id: spatz_req.id, write: '0, read: '0};
+
+        case (spatz_req.ex_unit)
+          VFU: begin
+            if ((spatz_req.use_vs1 && spatz_req.vs1 == FWVreg_q))
+              vlefw_table_d[spatz_req.id].read[SB_VFU_VS1_RD] = 1'b1;
+            if (spatz_req.use_vs2 && spatz_req.vs2 == FWVreg_q) 
+              vlefw_table_d[spatz_req.id].read[SB_VFU_VS2_RD] = 1'b1;
+            if (spatz_req.vd_is_src && spatz_req.vd == FWVreg_q) 
+              vlefw_table_d[spatz_req.id].read[SB_VFU_VD_RD] = 1'b1;
+          end
+          LSU: begin
+            if (spatz_req.use_vd && spatz_req.vd == FWVreg_q) 
+              vlefw_table_d[spatz_req.id].write[SB_VLSU_VD_WD-(NrVregfilePorts-NrWritePorts)] = 1'b1;
+          end
+          default: begin 
+            vlefw_table_d[spatz_req.id] = '{id: spatz_req.id, write: '0, read: '0};
+          end
+        endcase
+          
+      end 
+      
       // RAW hazard
       if (spatz_req.use_vs2) begin
         scoreboard_d[spatz_req.id].deps[write_table_d[spatz_req.vs2].id] |= write_table_d[spatz_req.vs2].valid;

@@ -150,6 +150,7 @@ package spatz_pkg;
     logic set_vstart;
     logic clear_vstart;
     logic reset_vstart;
+    logic vleforward;
   } op_cfg_t;
 
   typedef struct packed {

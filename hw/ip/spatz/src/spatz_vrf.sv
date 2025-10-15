@@ -20,10 +20,12 @@ module spatz_vrf
     input  vrf_data_t [NrWritePorts-1:0] wdata_i,
     input  logic      [NrWritePorts-1:0] we_i,
     input  vrf_be_t   [NrWritePorts-1:0] wbe_i,
+    input  logic      [NrWritePorts-1:0] vlefw_write_i,
     output logic      [NrWritePorts-1:0] wvalid_o,
     // Read ports
     input  vrf_addr_t [NrReadPorts-1:0]  raddr_i,
     input  logic      [NrReadPorts-1:0]  re_i,
+    input  logic      [NrReadPorts-1:0]  vlefw_read_i,
     output vrf_data_t [NrReadPorts-1:0]  rdata_o,
     output logic      [NrReadPorts-1:0]  rvalid_o
   );
@@ -68,6 +70,12 @@ module spatz_vrf
   vregfile_addr_t [NrVRFBanks-1:0][NrReadPortsPerBank-1:0] raddr;
   vrf_data_t      [NrVRFBanks-1:0][NrReadPortsPerBank-1:0] rdata;
 
+  /////////////////
+  // VLE forward //
+  /////////////////
+  vrf_data_t        vlefw_data_d, vlefw_data_q;
+  `FF(vlefw_data_q, vlefw_data_d, '0);
+
   ///////////////////
   // Write Mapping //
   ///////////////////
@@ -88,6 +96,8 @@ module spatz_vrf
     wbe      = '0;
     wvalid_o = '0;
 
+    vlefw_data_d = vlefw_data_q;
+
     // For each bank, we have a priority based access scheme. First priority always has the VFU,
     // second priority has the LSU, and third priority has the slide unit.
     for (int unsigned bank = 0; bank < NrVRFBanks; bank++) begin
@@ -98,12 +108,27 @@ module spatz_vrf
         we[bank]            = 1'b1;
         wbe[bank]           = wbe_i[VFU_VD_WD];
         wvalid_o[VFU_VD_WD] = 1'b1;
+
+        //resolve the competition if the forward buffer is enabled (yx)
+        if (write_request[bank][VLSU_VD_WD] && vlefw_write_i[VLSU_VD_WD]) begin
+          wvalid_o[VLSU_VD_WD] = 1'b1; // LSU write is accepted 
+          vlefw_data_d = wdata_i[VLSU_VD_WD];
+        end 
+          
       end else if (write_request[bank][VLSU_VD_WD]) begin
         waddr[bank]          = f_vreg(waddr_i[VLSU_VD_WD]);
         wdata[bank]          = wdata_i[VLSU_VD_WD];
-        we[bank]             = 1'b1;
+        we[bank]             = 1'b1 & (~vlefw_write_i[VLSU_VD_WD]); // No write if we are writing a VLEFW (yx)
         wbe[bank]            = wbe_i[VLSU_VD_WD];
         wvalid_o[VLSU_VD_WD] = 1'b1;
+
+
+        //VLE forward, store into buffer (yx)
+        if (vlefw_write_i[VLSU_VD_WD]) begin
+          vlefw_data_d = wdata[bank];
+        end
+        
+        
       end else if (write_request[bank][VSLDU_VD_WD]) begin
         waddr[bank]           = f_vreg(waddr_i[VSLDU_VD_WD]);
         wdata[bank]           = wdata_i[VSLDU_VD_WD];
@@ -139,9 +164,17 @@ module spatz_vrf
     for (int unsigned bank = 0; bank < NrVRFBanks; bank++) begin
       // Bank read port 0 - Priority: VFU (2) -> VLSU
       if (read_request[bank][VFU_VS2_RD]) begin
-        raddr[bank][0]       = f_vreg(raddr_i[VFU_VS2_RD]);
-        rdata_o[VFU_VS2_RD]  = rdata[bank][0];
+        raddr[bank][0]        = f_vreg(raddr_i[VFU_VS2_RD]);
+
+        if (vlefw_read_i[VFU_VS2_RD]) begin
+          // VLE forward, read from buffer
+            rdata_o[VFU_VS2_RD]  = vlefw_data_q;
+          end else begin
+            rdata_o[VFU_VS2_RD]  = rdata[bank][0]; 
+          end 
+
         rvalid_o[VFU_VS2_RD] = 1'b1;
+
       end else if (read_request[bank][VLSU_VS2_RD]) begin
         raddr[bank][0]        = f_vreg(raddr_i[VLSU_VS2_RD]);
         rdata_o[VLSU_VS2_RD]  = rdata[bank][0];
@@ -150,9 +183,18 @@ module spatz_vrf
 
       // Bank read port 1 - Priority: VFU (1) -> VSLDU
       if (read_request[bank][VFU_VS1_RD]) begin
+
         raddr[bank][1]       = f_vreg(raddr_i[VFU_VS1_RD]);
-        rdata_o[VFU_VS1_RD]  = rdata[bank][1];
+
+        if (vlefw_read_i[VFU_VS1_RD]) begin
+          // VLE forward, read from buffer
+            rdata_o[VFU_VS1_RD]  = vlefw_data_q;
+          end else begin 
+            rdata_o[VFU_VS1_RD]  = rdata[bank][1]; 
+          end
+
         rvalid_o[VFU_VS1_RD] = 1'b1;
+
       end else if (read_request[bank][VSLDU_VS2_RD]) begin
         raddr[bank][1]         = f_vreg(raddr_i[VSLDU_VS2_RD]);
         rdata_o[VSLDU_VS2_RD]  = rdata[bank][1];
@@ -161,9 +203,17 @@ module spatz_vrf
 
       // Bank read port 2 - Priority: VFU (D) -> VLSU
       if (read_request[bank][VFU_VD_RD]) begin
-        raddr[bank][2]      = f_vreg(raddr_i[VFU_VD_RD]);
-        rdata_o[VFU_VD_RD]  = rdata[bank][2];
+        raddr[bank][2]       = f_vreg(raddr_i[VFU_VD_RD]);
+
+        if (vlefw_read_i[VFU_VD_RD]) begin
+          // VLE forward, read from buffer
+            rdata_o[VFU_VD_RD]  = vlefw_data_q;
+          end else begin 
+            rdata_o[VFU_VD_RD]  = rdata[bank][2]; 
+          end
+
         rvalid_o[VFU_VD_RD] = 1'b1;
+
       end else if (read_request[bank][VLSU_VD_RD]) begin
         raddr[bank][2]       = f_vreg(raddr_i[VLSU_VD_RD]);
         rdata_o[VLSU_VD_RD]  = rdata[bank][2];

@@ -774,6 +774,8 @@ module snitch import snitch_pkg::*; import riscv_instr::*; #(
       // CSR Instructions
       CSRRW: begin // Atomic Read/Write CSR
         unique case (inst_data_i[31:20])
+
+      // Added the forward bypass CSR address (yx)
 `ifdef TARGET_SPATZ
           riscv_instr::CSR_VSTART,
           riscv_instr::CSR_VL,
@@ -781,7 +783,8 @@ module snitch import snitch_pkg::*; import riscv_instr::*; #(
           riscv_instr::CSR_VLENB,
           riscv_instr::CSR_VXSAT,
           riscv_instr::CSR_VXRM,
-          riscv_instr::CSR_VCSR: begin
+          riscv_instr::CSR_VCSR,
+          riscv_instr::CSR_VLEFORWARD: begin
             if (RVV) begin
               write_rd        = 1'b0;
               uses_rd         = rd != 0;
@@ -811,7 +814,8 @@ module snitch import snitch_pkg::*; import riscv_instr::*; #(
           riscv_instr::CSR_VLENB,
           riscv_instr::CSR_VXSAT,
           riscv_instr::CSR_VXRM,
-          riscv_instr::CSR_VCSR: begin
+          riscv_instr::CSR_VCSR,
+          riscv_instr::CSR_VLEFORWARD: begin
             if (RVV) begin
               write_rd        = 1'b0;
               uses_rd         = rd != 0;
@@ -840,7 +844,8 @@ module snitch import snitch_pkg::*; import riscv_instr::*; #(
           riscv_instr::CSR_VLENB,
           riscv_instr::CSR_VXSAT,
           riscv_instr::CSR_VXRM,
-          riscv_instr::CSR_VCSR: begin
+          riscv_instr::CSR_VCSR,
+          riscv_instr::CSR_VLEFORWARD: begin
             if (RVV) begin
               write_rd        = 1'b0;
               uses_rd         = 1'b1;
@@ -871,7 +876,8 @@ module snitch import snitch_pkg::*; import riscv_instr::*; #(
           riscv_instr::CSR_VLENB,
           riscv_instr::CSR_VXSAT,
           riscv_instr::CSR_VXRM,
-          riscv_instr::CSR_VCSR: begin
+          riscv_instr::CSR_VCSR,
+          riscv_instr::CSR_VLEFORWARD: begin
             if (RVV) begin
               write_rd        = 1'b0;
               uses_rd         = 1'b1;
@@ -906,7 +912,8 @@ module snitch import snitch_pkg::*; import riscv_instr::*; #(
           riscv_instr::CSR_VLENB,
           riscv_instr::CSR_VXSAT,
           riscv_instr::CSR_VXRM,
-          riscv_instr::CSR_VCSR: begin
+          riscv_instr::CSR_VCSR,
+          riscv_instr::CSR_VLEFORWARD: begin
             if (RVV) begin
               write_rd        = 1'b0;
               uses_rd         = 1'b1;
@@ -937,7 +944,8 @@ module snitch import snitch_pkg::*; import riscv_instr::*; #(
           riscv_instr::CSR_VLENB,
           riscv_instr::CSR_VXSAT,
           riscv_instr::CSR_VXRM,
-          riscv_instr::CSR_VCSR: begin
+          riscv_instr::CSR_VCSR,
+          riscv_instr::CSR_VLEFORWARD: begin
             if (RVV) begin
               write_rd        = 1'b0;
               uses_rd         = 1'b1;

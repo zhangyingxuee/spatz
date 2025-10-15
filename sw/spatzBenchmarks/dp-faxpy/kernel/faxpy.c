@@ -23,6 +23,10 @@ void faxpy_v64b(const double a, const double *x, const double *y,
                 unsigned int avl) {
   unsigned int vl;
 
+  // Configure the VLE forward extension (yx)
+  // Configure the VLE forward register to use (0-31) 
+  asm volatile("csrrwi x0, 0x7c2, 24");
+
   // Stripmine and accumulate a partial vector
   do {
     // Set the vl
@@ -30,19 +34,21 @@ void faxpy_v64b(const double a, const double *x, const double *y,
 
     // Load vectors
     asm volatile("vle64.v v0, (%0)" ::"r"(x));
-    asm volatile("vle64.v v8, (%0)" ::"r"(y));
+    asm volatile("vle64.v v24, (%0)" ::"r"(y));
 
     // Multiply-accumulate
-    asm volatile("vfmacc.vf v8, %0, v0" ::"f"(a));
+    asm volatile("vfmacc.vf v24, %0, v0" ::"f"(a));
 
     // Store results
-    asm volatile("vse64.v v8, (%0)" ::"r"(y));
+    asm volatile("vse64.v v24, (%0)" ::"r"(y));
 
     // Bump pointers
     x += vl;
     y += vl;
     avl -= vl;
   } while (avl > 0);
+
+  // asm volatile("csrrwi x0, 0x7c2, 24"); // disable VLE_forward extension (yx) 
 }
 
 // 32-bit AXPY: y = a * x + y
@@ -53,7 +59,7 @@ void faxpy_v32b(const float a, const float *x, const float *y,
   // Stripmine and accumulate a partial vector
   do {
     // Set the vl
-    asm volatile("vsetvli %0, %1, e32, m8, ta, ma" : "=r"(vl) : "r"(avl));
+    // asm volatile("vsetvli %0, %1, e32, m8, ta, ma" : "=r"(vl) : "r"(avl));
 
     // Load vectors
     asm volatile("vle32.v v0, (%0)" ::"r"(x));
