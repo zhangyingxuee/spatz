@@ -23,10 +23,6 @@ void faxpy_v64b(const double a, const double *x, const double *y,
                 unsigned int avl) {
   unsigned int vl;
 
-  // Configure the VLE forward extension (yx)
-  // Configure the VLE forward register to use (0-31) 
-  asm volatile("csrrwi x0, 0x7c2, 24");
-
   // Stripmine and accumulate a partial vector
   do {
     // Set the vl

@@ -25,8 +25,6 @@ double fdotp_v64b(const double *a, const double *b, unsigned int avl) {
 
   double red;
 
-  asm volatile("csrrwi x0, 0x7c2, 16");
-
   // Clean the accumulator
   asm volatile("vsetvli %0, %1, e64, m8, ta, ma" : "=r"(vl) : "r"(avl));
   asm volatile("vmv.s.x v0, zero");

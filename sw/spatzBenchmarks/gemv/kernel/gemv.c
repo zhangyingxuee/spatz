@@ -27,10 +27,11 @@ void gemv_v64b_m4(double *a, double* b, double* c, int M, int M_core, int N) {
   do {
     asm volatile("vsetvli %0, %1, e64, m4, ta, ma" : "=r"(vl) : "r"(avl));
     for (int col=0; col < N; col+=2) {
+
       // Load chunk a
       asm volatile("vle64.v v0, (%0)" ::"r"(a_));
       a_ += M;
-
+      
       // Multiply and accumulate
       if (col == 0) {
         asm volatile("vfmul.vf v4, v0, %0" ::"f"(*b_));
@@ -64,11 +65,12 @@ void gemv_v32b_m4(float *a, float* b, float* c, int M, int M_core, int N) {
   unsigned int vl, avl = M_core;
   float *a_ = a;
   float *b_ = b;
-  float *c_ = c;
+  float *c_ = c; 
 
   do {
     asm volatile("vsetvli %0, %1, e32, m4, ta, ma" : "=r"(vl) : "r"(avl));
     for (int col=0; col < N; col+=2) {
+
       // Load chunk a
       asm volatile("vle32.v v0, (%0)" ::"r"(a_));
       a_ += M;
@@ -108,6 +110,7 @@ void gemv_v16b_m4(__fp16 *a, __fp16* b, __fp16* c, int M, int M_core, int N) {
   __fp16 *a_ = a;
   __fp16 *b_ = b;
   __fp16 *c_ = c;
+
 
   do {
     asm volatile("vsetvli %0, %1, e16, m4, ta, ma" : "=r"(vl) : "r"(avl));

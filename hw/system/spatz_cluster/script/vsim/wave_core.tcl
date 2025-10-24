@@ -154,6 +154,13 @@ add wave -noupdate -group core[$1] -group Spatz -group VRF /tb_bin/i_dut/i_clust
 add wave -noupdate -group core[$1] -group Spatz -group VRF /tb_bin/i_dut/i_cluster_wrapper/i_cluster/gen_core[$1]/i_spatz_cc/i_spatz/i_vrf/raddr
 add wave -noupdate -group core[$1] -group Spatz -group VRF /tb_bin/i_dut/i_cluster_wrapper/i_cluster/gen_core[$1]/i_spatz_cc/i_spatz/i_vrf/rdata
 
+add wave -noupdate -group core[$1] -group Spatz -group VRF /tb_bin/i_dut/i_cluster_wrapper/i_cluster/gen_core[$1]/i_spatz_cc/i_spatz/i_vrf/vlefw_data_d
+add wave -noupdate -group core[$1] -group Spatz -group VRF /tb_bin/i_dut/i_cluster_wrapper/i_cluster/gen_core[$1]/i_spatz_cc/i_spatz/i_vrf/vlefw_data_q
+add wave -noupdate -group core[$1] -group Spatz -group VRF /tb_bin/i_dut/i_cluster_wrapper/i_cluster/gen_core[$1]/i_spatz_cc/i_spatz/i_vrf/vlefw_read_i
+add wave -noupdate -group core[$1] -group Spatz -group VRF /tb_bin/i_dut/i_cluster_wrapper/i_cluster/gen_core[$1]/i_spatz_cc/i_spatz/i_vrf/vlefw_write_i
+add wave -noupdate -group core[$1] -group Spatz -group VRF /tb_bin/i_dut/i_cluster_wrapper/i_cluster/gen_core[$1]/i_spatz_cc/i_spatz/i_vrf/vlefw_start_d
+add wave -noupdate -group core[$1] -group Spatz -group VRF /tb_bin/i_dut/i_cluster_wrapper/i_cluster/gen_core[$1]/i_spatz_cc/i_spatz/i_vrf/vlefw_start_q
+
 add wave -noupdate -group core[$1] -group Spatz -group VLSU /tb_bin/i_dut/i_cluster_wrapper/i_cluster/gen_core[$1]/i_spatz_cc/i_spatz/i_vlsu/*
 
 add wave -noupdate -group core[$1] -group Spatz -group VSLDU /tb_bin/i_dut/i_cluster_wrapper/i_cluster/gen_core[$1]/i_spatz_cc/i_spatz/i_vsldu/*
