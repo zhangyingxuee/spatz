@@ -1,14 +1,14 @@
 #!/bin/bash
 
 # Tests to include (add your patterns here)
-INCLUDE_PATTERNS=("faxpy" "fdotp")
+INCLUDE_PATTERNS=("gemv")
 
 # Directory containing test executables
 BUILD_DIR="sw/build/spatzBenchmarks"
 VSIM_CMD="bin/spatz_cluster.vsim"
 
 # Log directory
-LOG_DIR="test_logs/gemv_logs"
+LOG_DIR="test_logs/gemv_logs/M2/original"
 mkdir -p "$LOG_DIR"
 
 # Color codes

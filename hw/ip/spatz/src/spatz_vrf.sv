@@ -89,14 +89,6 @@ module spatz_vrf
 
   vregfile_addr_t   vlefw_addr_d, vlefw_addr_q;
   `FF(vlefw_addr_q, vlefw_addr_d, '0);
-  
-  logic             vlefw_repeat_d, vlefw_repeat_q;
-  `FF(vlefw_repeat_q, vlefw_repeat_d, 1'b0);
-
-  logic             vlefw_stall_d, vlefw_stall_q;
-  `FF(vlefw_stall_q, vlefw_stall_d, 1'b0);
-
-  
 
   ///////////////////
   // Write Mapping //
@@ -120,11 +112,9 @@ module spatz_vrf
 
     vlefw_data_d = vlefw_data_q;
     vlefw_start_d = vlefw_start_q;
-    vlefw_repeat_d = vlefw_repeat_q;
 
     if (~(|vlefw_write_i)) begin 
       vlefw_start_d = 1'b0;
-      vlefw_repeat_d = 1'b0;
     end
 
     // For each bank, we have a priority based access scheme. First priority always has the VFU,
@@ -145,25 +135,8 @@ module spatz_vrf
           if (vlefw_write_i[VLSU_VD_WD]) begin 
             if (vlefw_start_q) begin 
               if ((|vlefw_read_i)) begin
-                if (vlefw_addr_q != (raddr_i[f_port(vlefw_read_i)])) begin
-                  // If forward read is raised and the address is different 
-                  // Update the buffer by retrieving the LSU write data 
-                  vlefw_data_d = wdata_i[VLSU_VD_WD];
-                  wvalid_o[VLSU_VD_WD] = 1'b1;
-                  vlefw_repeat_d = 1'b0;
-                end else begin 
-                  // Update the buffer after repeating once and if stalling happens 
-                  if (vlefw_repeat_q || vlefw_stall_q) begin
-                    vlefw_data_d = wdata_i[VLSU_VD_WD];
-                    wvalid_o[VLSU_VD_WD] = 1'b1;
-                    vlefw_repeat_d = 1'b0;
-                  end else begin
-                    // Stall LSU write if repeated request on the same address 
-                    vlefw_data_d = vlefw_data_q; 
-                    wvalid_o[VLSU_VD_WD] = 1'b0; 
-                    vlefw_repeat_d = 1'b1;
-                  end
-                end 
+                vlefw_data_d = wdata_i[VLSU_VD_WD];
+                wvalid_o[VLSU_VD_WD] = 1'b1;
               end else begin 
                 // Stall the LSU write if no forward read signal to read from the buffer 
                 vlefw_data_d = vlefw_data_q; 
@@ -178,7 +151,6 @@ module spatz_vrf
           end else begin 
             // If write request from LSU is invalid, clear the start bit to indicate disruptions in writing 
             vlefw_start_d = 1'b0;
-            vlefw_repeat_d = 1'b0;
           end 
         end
           
@@ -193,22 +165,8 @@ module spatz_vrf
         if (vlefw_write_i[VLSU_VD_WD]) begin
           if (vlefw_start_q) begin 
             if ((|vlefw_read_i)) begin 
-              if (vlefw_addr_q != (raddr_i[f_port(vlefw_read_i)])) begin
-                  // Read signal arrived! Update buffer with new write data
-                  vlefw_data_d = wdata_i[VLSU_VD_WD];
-                  wvalid_o[VLSU_VD_WD] = 1'b1;
-                  vlefw_repeat_d = 1'b0;
-              end else begin 
-                if (vlefw_repeat_q || vlefw_stall_q) begin 
-                  vlefw_data_d = wdata_i[VLSU_VD_WD];
-                  wvalid_o[VLSU_VD_WD] = 1'b1;
-                  vlefw_repeat_d = 1'b0;
-                end else begin
-                  vlefw_data_d = vlefw_data_q; 
-                  wvalid_o[VLSU_VD_WD] = 1'b0; // Stall LSU write (or accept, depends on your protocol)
-                  vlefw_repeat_d = 1'b1;
-                end
-              end 
+              vlefw_data_d = wdata_i[VLSU_VD_WD];
+              wvalid_o[VLSU_VD_WD] = 1'b1;
             end else begin 
               // No read signal yet, KEEP old buffer value
               vlefw_data_d = vlefw_data_q; // ← This retains the old value
@@ -222,7 +180,6 @@ module spatz_vrf
           end
         end else begin 
           vlefw_start_d = 1'b0;
-          vlefw_repeat_d = 1'b0;
         end
         
       end else if (write_request[bank][VSLDU_VD_WD]) begin
@@ -253,7 +210,6 @@ module spatz_vrf
     rvalid_o = '0;
     rdata_o  = 'x;
     vlefw_addr_d = vlefw_addr_q;
-    vlefw_stall_d = vlefw_stall_q;
 
 
     // For each port or each bank we have a priority based access scheme.
@@ -270,10 +226,8 @@ module spatz_vrf
           vlefw_addr_d = raddr_i[VFU_VS2_RD];
           if (vlefw_start_q) begin 
             rvalid_o[VFU_VS2_RD] = 1'b1;
-            vlefw_stall_d = 1'b0;
           end else begin 
             rvalid_o[VFU_VS2_RD] = 1'b0;
-            vlefw_stall_d = 1'b1;
           end
         end else begin
           raddr[bank][0]        = f_vreg(raddr_i[VFU_VS2_RD]);
@@ -297,10 +251,8 @@ module spatz_vrf
           vlefw_addr_d = raddr_i[VFU_VS1_RD];
           if (vlefw_start_q) begin 
             rvalid_o[VFU_VS1_RD] = 1'b1;
-            vlefw_stall_d = 1'b0;
           end else begin 
             rvalid_o[VFU_VS1_RD] = 1'b0;
-            vlefw_stall_d = 1'b1;
           end
         end else begin 
           raddr[bank][1]       = f_vreg(raddr_i[VFU_VS1_RD]);
@@ -323,10 +275,8 @@ module spatz_vrf
           vlefw_addr_d = raddr_i[VFU_VD_RD];
           if (vlefw_start_q) begin 
             rvalid_o[VFU_VD_RD] = 1'b1;
-            vlefw_stall_d = 1'b0;
           end else begin 
             rvalid_o[VFU_VD_RD] = 1'b0;
-            vlefw_stall_d = 1'b1;
           end
         end else begin 
           raddr[bank][2]       = f_vreg(raddr_i[VFU_VD_RD]);
