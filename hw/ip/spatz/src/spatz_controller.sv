@@ -123,9 +123,7 @@ module spatz_controller
             vlefw_en_d = '1;
             FWVreg_d = spatz_req.rs1; 
           end
-        end else begin
-          vlefw_en_d = '0;
-        end
+        end 
       end
 
       // Change vtype and vl if we have a config instruction
